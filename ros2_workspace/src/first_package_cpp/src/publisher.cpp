@@ -16,7 +16,7 @@ public:
         count_ = 0;
     }
 private:
-    // We will define the timer_callback() here
+    // We define the timer_callback() here
     void timer_callback() {
         message.data = "Hello, ROS2! " + std::to_string(count_++);
         RCLCPP_INFO(this->get_logger(), "Publishing: '%s'", message.data.c_str()); 
