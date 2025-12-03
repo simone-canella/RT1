@@ -13,6 +13,8 @@ find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(turtlesim REQUIRED)
 find_package(geometry_msgs REQUIRED)
+find_package(turtlesim REQUIRED)
+
 
 add_executable(turtle src/controller.cpp)
 add_executable(exercise1 src/exercise1.cpp)
