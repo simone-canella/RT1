@@ -14,9 +14,10 @@ find_package(rclcpp REQUIRED)
 find_package(turtlesim REQUIRED)
 find_package(geometry_msgs REQUIRED)
 
-
 add_executable(turtle src/controller.cpp)
+add_executable(exercise1 src/exercise1.cpp)
 ament_target_dependencies(turtle rclcpp turtlesim geometry_msgs)
+ament_target_dependencies(exercise1 rclcpp turtlesim geometry_msgs)
 
 
 if(BUILD_TESTING)
@@ -31,10 +32,11 @@ if(BUILD_TESTING)
   ament_lint_auto_find_test_dependencies()
 endif()
 
-ament_package()
-
 install(
   TARGETS 
     turtle
+    exercise1
   DESTINATION lib/${PROJECT_NAME}
 )
+
+ament_package()

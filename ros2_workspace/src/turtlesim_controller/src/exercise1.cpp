@@ -35,6 +35,8 @@ private:
     float x_;
     float y_;
     float theta_;
+    float v_ = 2.0;
+    float omega_ = 1;
 
     // === CALLBACKS ===
 
@@ -57,11 +59,14 @@ private:
         geometry_msgs::msg::Twist message;
 
         // CLOSED-LOOP LOGIC
-        if (x_ < 9.0) {
-            message.linear.x = 2.0;
-            message.angular.z = 0.0;
-        } else {
-            message.linear.x = 0.0;
+        if (x_ > 9.0) { //turning motion
+            message.linear.x = v_;
+            message.angular.z = omega_;
+        } else if (x_ < 2.0) { //turning motion
+            message.linear.x = v_;
+            message.angular.z = -omega_;
+        } else { //forward motion
+            message.linear.x = v_;
             message.angular.z = 0.0;
         }
 
