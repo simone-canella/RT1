@@ -12,9 +12,10 @@ find_package(ament_cmake REQUIRED)
 # find_package(<dependency> REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(geometry_msgs REQUIRED)
+find_package(std_msgs REQUIRED)
 
 add_executable(ui_node src/UI.cpp)
-ament_target_dependencies(ui_node rclcpp geometry_msgs)
+ament_target_dependencies(ui_node rclcpp geometry_msgs std_msgs)
 
 install(
   TARGETS 
