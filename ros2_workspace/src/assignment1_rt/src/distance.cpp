@@ -65,7 +65,6 @@ private:
     float max_boundary_ = 10.0f;
 
     // === CALLBACKS ===
-
     // callback for turtle1 pose
     void t1_pose_callback(const turtlesim::msg::Pose::SharedPtr msg)
     {
