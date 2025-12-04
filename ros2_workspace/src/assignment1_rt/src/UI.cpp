@@ -1,10 +1,13 @@
 #include "rclcpp/rclcpp.hpp"
 #include "geometry_msgs/msg/twist.hpp"
+#include "std_msgs/msg/string.hpp"
 #include <iostream>
 
 class UI : public rclcpp::Node {
 public:
     UI() : Node("ui_node") {
+        // create a publisher for telling which turtle is moving
+        moving_turtle_pub_ = this->create_publisher<std_msgs::msg::String>("/moving_turtle", 10); 
 
         while (rclcpp::ok()) {
             std::string turtle; // string that contains the name of the selected turtle
@@ -19,7 +22,7 @@ public:
                 continue;
             }
 
-            // create a topic containing the turtle name 
+            // build the cmd_vel topic for the selected turtle (containing the turtle name)
             std::string topic = "/" + turtle + "/cmd_vel";
 
             // create publisher for this turtle
@@ -40,11 +43,17 @@ public:
             message.linear.x = linear_velocity;
             message.angular.z = angular_velocity;
 
+            // initialize and publish which turtle is moving (for the distance node)
+            std_msgs::msg::String msg;
+            msg.data = turtle;
+            moving_turtle_pub_->publish(msg);
+
             // sent message for 1 second
             rclcpp::Rate rate(10); // 10 Hz
             auto start = now();
 
             while ((now() - start).seconds() < 1.0 && rclcpp::ok()) {
+                // publish the velocity of the moving turtle
                 publisher_->publish(message);
                 rate.sleep();
             }
@@ -60,6 +69,7 @@ public:
 
 private:
     rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr publisher_;
+    rclcpp::Publisher<std_msgs::msg::String>::SharedPtr moving_turtle_pub_;
 };
 
 int main(int argc, char **argv) {
