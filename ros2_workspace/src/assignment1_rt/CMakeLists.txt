@@ -13,13 +13,17 @@ find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(geometry_msgs REQUIRED)
 find_package(std_msgs REQUIRED)
+find_package(turtlesim REQUIRED)
 
 add_executable(ui_node src/UI.cpp)
 ament_target_dependencies(ui_node rclcpp geometry_msgs std_msgs)
+add_executable(distance_node src/distance.cpp)
+ament_target_dependencies(distance_node rclcpp std_msgs geometry_msgs turtlesim)
 
 install(
   TARGETS 
     ui_node
+    distance_node
   DESTINATION lib/${PROJECT_NAME}
 )
 
