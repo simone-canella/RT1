@@ -86,7 +86,51 @@ private:
         RCLCPP_INFO(this->get_logger(), "Currently moving turtle: %s", moving_turtle_.c_str());
     }
     
-    
+    // timer callback: where live distance computation + safety logic
+    void timer_callback()
+    {
+        // compute distance between the two turtle
+        float distance = sqrt(pow(t1_x_ - t2_x_, 2) + pow(t1_y_ - t2_y_, 2));
+
+        // initialize and publish the distance
+        std_msgs::msg::Float32 message;
+        message.data = distance;
+        distance_pub_ -> publish(message);
+
+        // check thresholds (distance + boundaries) 
+        if (moving_turtle_ == "turtle1" && ((t1_x_ < min_boundary_ || 
+                                            t1_x_ > max_boundary_ || 
+                                            t1_y_ < min_boundary_ || 
+                                            t1_y_ > max_boundary_)|| 
+                                            distance < distance_threshold_)) {
+            
+            // stop the moving turtle
+            geometry_msgs::msg::Twist stop_message;
+            stop_message.linear.x = 0;
+            stop_message.angular.z = 0; 
+
+            turtle1_stop_pub_->publish(stop_message);
+
+            RCLCPP_WARN(this->get_logger(), 
+                "TURTLE STOP: turtle1 is stopped beacuse to cloose to other turtle or to the boundaries");
+
+        } else if (moving_turtle_ == "turtle2" && ((t2_x_ < min_boundary_ || 
+                                                    t2_x_ > max_boundary_ || 
+                                                    t2_y_ < min_boundary_ || 
+                                                    t2_y_ > max_boundary_)||
+                                                    distance < distance_threshold_)) {
+
+            // stop the moving turtle
+            geometry_msgs::msg::Twist stop_message;
+            stop_message.linear.x = 0;
+            stop_message.angular.z = 0; 
+
+            turtle2_stop_pub_->publish(stop_message);
+
+            RCLCPP_WARN(this->get_logger(), 
+                "TURTLE STOP: turtle2 is stopped beacuse to cloose to other turtle or to the boundaries");
+        }
+    }
 
     // subscribers
     rclcpp::Subscription<turtlesim::msg::Pose>::SharedPtr t1_pose_sub_;
