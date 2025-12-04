@@ -4,6 +4,7 @@
 #include "turtlesim/srv/teleport_absolute.hpp" // for setting the position
 #include <iostream>
 #include <functional>
+#include <cmath>
 
 using std::placeholders::_1; // use "_1" as container of our message
 
@@ -27,20 +28,16 @@ public:
             RCLCPP_WARN(this->get_logger(), "Waiting for /turtle1/teleport_absolute service...");
         }
 
-        auto request = std::make_shared<turtlesim::srv::TeleportAbsolute::Request>();
-        request->x = 2.5; //not "1.0" because the turning condition
-        request->y = 1;
-        request->theta = 0.0;
-
-        auto result = teleport_client_->async_send_request(request);
+        auto start_request = std::make_shared<turtlesim::srv::TeleportAbsolute::Request>();
+        start_request->x = 2.5; //not "1.0" because the turning condition
+        start_request->y = 1;
+        start_request->theta = 0.0;
+        teleport_client_->async_send_request(start_request);
 
         // 4. TIMER: control loop (runs every 100 ms)
         timer_ = this->create_wall_timer(
             std::chrono::milliseconds(100), 
             std::bind(&Controller::timer_callback, this)); 
-        
-        turning_ = false;
-        moving_right_ = true;
     }
 
 private:
@@ -56,75 +53,95 @@ private:
     float y_ = 0;
     float theta_ = 0;
 
-    bool turning_; // true = executing a semicircle
-    bool moving_right_ ; // false = moving left
+    int state = 0;
 
     //CONTROL PARAMETERS
-    float v_ = 2.0;
-    float omega_ = 1.0;
+    float linear_velocity = 1.0;
+    float angular_velocity = 1.0;
 
     // === CALLBACKS ===
-
     // Pose subscriber callback
     void topic_callback(const turtlesim::msg::Pose::SharedPtr msg)
     {
         x_ = msg->x;
         y_ = msg->y;
-        theta_ = msg->theta;
-
-        RCLCPP_INFO(this->get_logger(),
-                    "Pose -> x: %.2f  y: %.2f  theta: %.2f",
-                    x_, y_, theta_);
+        theta_ = msg->theta;        
     }
-
 
     // Control loop (timer)
     void timer_callback()
     {
         geometry_msgs::msg::Twist message;
 
-
-        if (y_ > 10.5) { //stop when reach top limit
-            publisher_->publish(geometry_msgs::msg::Twist());
-            RCLCPP_INFO(this->get_logger(), "Stop: reached top limit");
+        if(y_ >= 11.0) {
+            RCLCPP_INFO(this->get_logger(), "STOP: top limit reached");
+            message.linear.x = 0;
+            message.angular.z = 0;
+            publisher_->publish(message);
+            
             return;
         }
         
-        if (turning_) { //turning logic
-            if (moving_right_) {
-                if (theta_ < 3.1) { //anti-clock turning
-                    message.linear.x = v_;
-                    message.angular.z = omega_;
-                } else {
-                    turning_ = false; // finished turn
-                    moving_right_ = false; // now going left
-                }
-            } else {
-                if (theta_ > 0.1) { //clock turning
-                    message.linear.x = v_;
-                    message.angular.z = -omega_;
-                } else {
-                    turning_ = false; // finished turn
-                    moving_right_ = true; // now going left
-                }
-            }
-        } else { //straight motion
-            message.linear.x = v_;
-            message.angular.z = 0.0;
+        switch(state) {
 
-            if (moving_right_ && x_ > 9.0) { // right boundary reached
-                turning_ = true; //start turning logic
-            }
+        case 0:  // MOVE RIGHT
+            // set velocities
+            message.linear.x = linear_velocity;
+            message.angular.z = 0;
 
-            if (!moving_right_ && x_ < 2.0) { // left boundary reached
-                turning_ = true; //start turning logic
+            // check if x > 9 → change state
+            if (x_ >= 9 ) {
+                RCLCPP_INFO(this->get_logger(),
+                    "Pose -> x: %.2f  y: %.2f  theta: %.2f",
+                    x_, y_, theta_);
+                RCLCPP_INFO(this->get_logger(), "CHANGE STATE");
+                message.linear.x = 0;
+                message.angular.z = 0;
+                state++;
             }
+            break;
+
+        case 1:  // TURN LEFT
+            // set angular velocity
+            message.linear.x = linear_velocity;
+            message.angular.z = angular_velocity;
+
+            // check if x < 9 → change state
+            if (fabs(theta_ - 3.14) < 0.1 || x_ <= 9.0) {
+                RCLCPP_INFO(this->get_logger(),
+                    "Pose -> x: %.2f  y: %.2f  theta: %.2f",
+                    x_, y_, theta_);
+                RCLCPP_INFO(this->get_logger(), "CHANGE STATE");
+
+                auto request = std::make_shared<turtlesim::srv::TeleportAbsolute::Request>();
+                request->x = 9.0f; //not "1.0" because the turning condition
+                request->y = y_;
+                request->theta = 3.14f;
+
+                teleport_client_->async_send_request(request);
+
+
+                message.linear.x = 0;
+                message.angular.z = 0;
+                state++;
+            }
+            break;
+
+        case 2:  // MOVE LEFT
+            // set velocities
+            message.linear.x = linear_velocity;
+            message.angular.z = 0;
+            // check if x < 2 → change state
+            break;
+
+        case 3:  // TURN RIGHT
+            // set angular velocity
+            // check if x > 2 → change state
+            break;
         }
 
         publisher_->publish(message);
     }
-
-    //rclcpp::Subscription<turtlesim::msg::Pose>::SharedPtr subscription_;
 };
 
 int main(int argc, char* argv[])
