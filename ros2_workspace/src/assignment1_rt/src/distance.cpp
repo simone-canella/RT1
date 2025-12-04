@@ -32,6 +32,13 @@ public:
             std::bind(&DistanceNode::moving_turtle_callback, this, std::placeholders::_1)
         );
 
+        // === PUBLISHERS ===
+        // publisher for the distance between turtles
+        distance_pub_ = this->create_publisher<std_msgs::msg::Float32>("/turtles_distance", 10);
+
+        // publishers to stop turtles
+        turtle1_stop_pub_ = this->create_publisher<geometry_msgs::msg::Twist>("/turtle1/cmd_vel", 10);
+        turtle2_stop_pub_ = this->create_publisher<geometry_msgs::msg::Twist>("/turtle2/cmd_vel", 10);
     }
 
 private:
@@ -70,11 +77,17 @@ private:
         RCLCPP_INFO(this->get_logger(), "Currently moving turtle: %s", moving_turtle_.c_str());
     }
     
+    
 
     // subscribers
     rclcpp::Subscription<turtlesim::msg::Pose>::SharedPtr t1_pose_sub_;
     rclcpp::Subscription<turtlesim::msg::Pose>::SharedPtr t2_pose_sub_;
     rclcpp::Subscription<std_msgs::msg::String>::SharedPtr moving_turtle_sub_;
+
+    // publishers
+    rclcpp::Publisher<std_msgs::msg::Float32>::SharedPtr distance_pub_;
+    rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr turtle1_stop_pub_;
+    rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr turtle2_stop_pub_;
 };
 
 int main(int argc, char **argv)
