@@ -77,6 +77,7 @@ private:
             RCLCPP_INFO(this->get_logger(), "STOP: top limit reached");
             message.linear.x = 0;
             message.angular.z = 0;
+            state = 0;
             publisher_->publish(message);
             
             return;
@@ -94,7 +95,7 @@ private:
                 RCLCPP_INFO(this->get_logger(),
                     "Pose -> x: %.2f  y: %.2f  theta: %.2f",
                     x_, y_, theta_);
-                RCLCPP_INFO(this->get_logger(), "CHANGE STATE");
+                RCLCPP_INFO(this->get_logger(), "CHANGE TO STATE 1");
                 message.linear.x = 0;
                 message.angular.z = 0;
                 state++;
@@ -111,10 +112,10 @@ private:
                 RCLCPP_INFO(this->get_logger(),
                     "Pose -> x: %.2f  y: %.2f  theta: %.2f",
                     x_, y_, theta_);
-                RCLCPP_INFO(this->get_logger(), "CHANGE STATE");
+                RCLCPP_INFO(this->get_logger(), "CHANGE TO STATE 2");
 
                 auto request = std::make_shared<turtlesim::srv::TeleportAbsolute::Request>();
-                request->x = 9.0f; //not "1.0" because the turning condition
+                request->x = 9.0f; 
                 request->y = y_;
                 request->theta = 3.14f;
 
@@ -131,12 +132,43 @@ private:
             // set velocities
             message.linear.x = linear_velocity;
             message.angular.z = 0;
+
             // check if x < 2 → change state
+            if (x_ <= 2 ) {
+                RCLCPP_INFO(this->get_logger(),
+                    "Pose -> x: %.2f  y: %.2f  theta: %.2f",
+                    x_, y_, theta_);
+                RCLCPP_INFO(this->get_logger(), "CHANGE TO STATE 3");
+                message.linear.x = 0;
+                message.angular.z = 0;
+                state++;
+            }
             break;
 
         case 3:  // TURN RIGHT
             // set angular velocity
+            message.linear.x = linear_velocity;
+            message.angular.z = -angular_velocity;
+            
             // check if x > 2 → change state
+            if (fabs(theta_ - 0.0) < 0.1 || x_ >= 2.0) {
+                RCLCPP_INFO(this->get_logger(),
+                    "Pose -> x: %.2f  y: %.2f  theta: %.2f",
+                    x_, y_, theta_);
+                RCLCPP_INFO(this->get_logger(), "CHANGE TO STATE 0");
+
+                auto request = std::make_shared<turtlesim::srv::TeleportAbsolute::Request>();
+                request->x = 2.0f; 
+                request->y = y_;
+                request->theta = 0.0f;
+
+                teleport_client_->async_send_request(request);
+
+
+                message.linear.x = 0;
+                message.angular.z = 0;
+                state = 0;
+            }
             break;
         }
 
