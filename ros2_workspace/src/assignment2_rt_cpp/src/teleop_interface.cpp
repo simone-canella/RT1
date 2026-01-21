@@ -52,7 +52,7 @@ public:
     }
 
 private:
-    // Publisher
+    // PUBLISHERS
     rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr pub_;
 };
 
