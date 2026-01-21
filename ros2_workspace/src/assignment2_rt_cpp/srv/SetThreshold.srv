@@ -1,0 +1,4 @@
+float32 new_threshold
+---
+bool success
+float32 current_threshold

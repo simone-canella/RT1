@@ -1,0 +1,4 @@
+---
+float32 avg_linear_x
+float32 avg_angular_z
+uint8 count

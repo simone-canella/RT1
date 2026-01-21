@@ -1,0 +1,3 @@
+float32 closest_distance
+uint8 direction
+float32 threshold
