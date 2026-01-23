@@ -10,6 +10,8 @@ public:
         // Create publisher
         pub_ = this->create_publisher<geometry_msgs::msg::Twist>(
             "/user_cmd_vel", 10);
+
+        this->declare_parameter<double>("command_duration", 1.0); // standard command duration = 1
     }
 
     void run()
@@ -18,23 +20,33 @@ public:
         {
             // initialize control variables
             double linear_velocity = 0.0, angular_velocity = 0.0;
+            double user_duration = 0.0;
+            double command_duration = this->get_parameter("command_duration").as_double();
 
             // ask to the user the values of controls variables
             std::cout << "Insert linear velocity: ";
             std::cin >> linear_velocity;
             std::cout << "Insert angular velocity: ";
             std::cin >> angular_velocity;
+            std::cout << "Insert the command duration in seconds (0 = default "
+                      << command_duration << "): ";
+            std::cin >> user_duration;
+
+            if (user_duration > 0.0)
+            {
+                command_duration = user_duration;
+            }
 
             // initialize the values of the message
             geometry_msgs::msg::Twist msg;
             msg.linear.x = linear_velocity;
             msg.angular.z = angular_velocity;
 
-            // send message for 1 second
+            // send message for user commad duration(seconds)
             rclcpp::Rate rate(10);
             auto start = now();
 
-            while ((now() - start).seconds() < 1.0)
+            while ((now() - start).seconds() < command_duration)
             {
                 pub_->publish(msg);
                 rclcpp::spin_some(this->get_node_base_interface());
