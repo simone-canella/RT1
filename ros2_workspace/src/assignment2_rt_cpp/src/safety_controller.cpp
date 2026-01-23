@@ -1,9 +1,12 @@
 #include <rclcpp/rclcpp.hpp>
 #include "geometry_msgs/msg/twist.hpp"
 #include "sensor_msgs/msg/laser_scan.hpp"
+#include "nav_msgs/msg/odometry.hpp"
+#include <tf2_geometry_msgs/tf2_geometry_msgs.hpp>
 #include <chrono>
 #include <limits>
 #include <cmath>
+#include <tf2/utils.h>
 #include <iostream>
 
 class SafetyController : public rclcpp::Node
@@ -22,6 +25,10 @@ public:
         scanner_sub_ = this->create_subscription<sensor_msgs::msg::LaserScan>(
             "/scan", 10,
             std::bind(&SafetyController::scannerCallback, this, std::placeholders::_1));
+
+        odometry_sub_ = this->create_subscription<nav_msgs::msg::Odometry>(
+            "/odom", 10,
+            std::bind(&SafetyController::odomCallback, this, std::placeholders::_1));
 
         // PUBLISHERS
         // publisher to cmd_vel
@@ -43,6 +50,12 @@ private:
 
     float min_distance_ = std::numeric_limits<float>::infinity(); // distance of closest obstacle
     uint8_t obstacle_sector_ = 0;                                 // 0=FRONT, 1=LEFT, 2=BACK, 3=RIGHT
+
+    double current_x_ = 0.0;
+    double current_y_ = 0.0;
+    bool have_odom_ = false;
+
+    double yaw_ = 0.0;
 
     // given an angle normalize it to [-pi, +pi]
     static double normalizeAngle(double angle)
@@ -138,6 +151,25 @@ private:
         }
     }
 
+    // odometry callback: odometry is a quaternion so we need to extract waw,pitch,roll with "tf2"
+    void odomCallback(const nav_msgs::msg::Odometry::SharedPtr msg)
+    {
+        RCLCPP_INFO(this->get_logger(), "Received odometry");
+
+        yaw_ = tf2::getYaw(msg->pose.pose.orientation);
+
+        current_x_ = msg->pose.pose.position.x;
+        current_y_ = msg->pose.pose.position.y;
+        have_odom_ = true;
+
+        if (have_odom_)
+        {
+            RCLCPP_INFO(this->get_logger(), "Odom: x=%.2f y=%.2f", current_x_, current_y_);
+            RCLCPP_INFO(this->get_logger(), "Pose: x=%.2f y=%.2f yaw=%.2f", current_x_, current_y_, yaw_);
+
+        }
+    }
+
     // timer callback
     void controlLoop()
     {
@@ -155,6 +187,7 @@ private:
     // SUBSCRIBERS
     rclcpp::Subscription<geometry_msgs::msg::Twist>::SharedPtr user_cmd_sub_;
     rclcpp::Subscription<sensor_msgs::msg::LaserScan>::SharedPtr scanner_sub_;
+    rclcpp::Subscription<nav_msgs::msg::Odometry>::SharedPtr odometry_sub_;
 
     // PUBLISHERS
     rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr cmd_vel_pub_;
