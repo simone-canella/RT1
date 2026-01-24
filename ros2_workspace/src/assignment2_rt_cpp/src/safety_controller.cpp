@@ -5,6 +5,7 @@
 #include <tf2_geometry_msgs/tf2_geometry_msgs.hpp>
 #include <tf2/utils.h>
 #include "assignment2_rt_cpp/msg/obstacle_info.hpp"
+#include "assignment2_rt_cpp/srv/set_threshold.hpp"
 
 #include <chrono>
 #include <limits>
@@ -60,6 +61,13 @@ public:
         timer_ = this->create_wall_timer(
             std::chrono::milliseconds(20), // publish rate = 50Hz (20mS)
             std::bind(&SafetyController::controlLoop, this));
+
+        // SERVICES
+        // set threshold service
+        set_threshold_srv_ = this->create_service<assignment2_rt_cpp::srv::SetThreshold>(
+            "/set_threshold",
+            std::bind(&SafetyController::setThresholdCallback, this,
+                      std::placeholders::_1, std::placeholders::_2));
     }
 
 private:
@@ -386,6 +394,23 @@ private:
         }
     }
 
+    // threshold callback
+    void setThresholdCallback(
+        const std::shared_ptr<assignment2_rt_cpp::srv::SetThreshold::Request> request,
+        std::shared_ptr<assignment2_rt_cpp::srv::SetThreshold::Response> response)
+    {
+        if (request->new_threshold <= 0.0f)
+        {
+            response->success = false;
+            response->current_threshold = static_cast<float>(threshold_);
+            return;
+        }
+
+        threshold_ = static_cast<double>(request->new_threshold);
+        response->success = true;
+        response->current_threshold = static_cast<float>(threshold_);
+    }
+
     // SUBSCRIBERS INTERFACES
     rclcpp::Subscription<geometry_msgs::msg::Twist>::SharedPtr user_cmd_sub_;
     rclcpp::Subscription<sensor_msgs::msg::LaserScan>::SharedPtr scanner_sub_;
@@ -397,6 +422,9 @@ private:
 
     // TIMER INTERFACES
     rclcpp::TimerBase::SharedPtr timer_;
+
+    // SERVICES INTERFACES
+    rclcpp::Service<assignment2_rt_cpp::srv::SetThreshold>::SharedPtr set_threshold_srv_;
 };
 
 int main(int argc, char **argv)
