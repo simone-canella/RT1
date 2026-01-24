@@ -4,6 +4,7 @@
 #include "nav_msgs/msg/odometry.hpp"
 #include <tf2_geometry_msgs/tf2_geometry_msgs.hpp>
 #include <tf2/utils.h>
+#include "assignment2_rt_cpp/msg/obstacle_info.hpp"
 
 #include <chrono>
 #include <limits>
@@ -50,6 +51,9 @@ public:
         // publisher to cmd_vel
         cmd_vel_pub_ = this->create_publisher<geometry_msgs::msg::Twist>("/cmd_vel", 10);
         RCLCPP_INFO(this->get_logger(), "cmd_vel publisher created");
+
+        // publisher to custom message
+        obstacle_pub_ = this->create_publisher<assignment2_rt_cpp::msg::ObstacleInfo>("/obstacle_info", 10);
 
         // TIMER
         // run the "control loop"
@@ -362,6 +366,13 @@ private:
             cmd_vel_pub_->publish(stop);
         }
 
+        // publish obstacle information with the custom message "ObstacleInfo"
+        assignment2_rt_cpp::msg::ObstacleInfo info;
+        info.closest_distance = static_cast<float>(min_distance_);
+        info.direction = obstacle_sector_;
+        info.threshold = static_cast<float>(threshold_);
+        obstacle_pub_->publish(info);
+
         // DEBUGGING
         // print log for debugging
         if (shouldPrintDebug())
@@ -382,6 +393,7 @@ private:
 
     // PUBLISHERS INTERFACE
     rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr cmd_vel_pub_;
+    rclcpp::Publisher<assignment2_rt_cpp::msg::ObstacleInfo>::SharedPtr obstacle_pub_;
 
     // TIMER INTERFACES
     rclcpp::TimerBase::SharedPtr timer_;
