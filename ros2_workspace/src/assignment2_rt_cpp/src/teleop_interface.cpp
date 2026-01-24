@@ -11,7 +11,8 @@ public:
         pub_ = this->create_publisher<geometry_msgs::msg::Twist>(
             "/user_cmd_vel", 10);
 
-        this->declare_parameter<double>("command_duration", 1.0); // standard command duration = 1
+        // default parameters
+        this->declare_parameter<int>("command_duration", 5.0); // standard command duration = 5
     }
 
     void run()
@@ -20,8 +21,8 @@ public:
         {
             // initialize control variables
             double linear_velocity = 0.0, angular_velocity = 0.0;
-            double user_duration = 0.0;
-            double command_duration = this->get_parameter("command_duration").as_double();
+            int user_duration = 0.0;
+            int command_duration = this->get_parameter("command_duration").as_int();
 
             // ask to the user the values of controls variables
             std::cout << "Insert linear velocity: ";

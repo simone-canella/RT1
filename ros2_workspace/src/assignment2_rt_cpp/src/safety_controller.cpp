@@ -16,6 +16,16 @@ public:
     {
         RCLCPP_INFO(this->get_logger(), "Safety Controller started");
 
+        // default parameters
+        this->declare_parameter<double>("threshold", 0.8);
+        threshold_ = this->get_parameter("threshold").as_double();
+
+        this->declare_parameter<bool>("debug", false);
+        this->declare_parameter<double>("debug_period", 1.0);
+        debug_mode_ = this->get_parameter("debug").as_bool();
+        debug_period_ = this->get_parameter("debug_period").as_double();
+        last_debug_time_ = this->now();
+
         // SUBSCRIBERS
         // subscribe to user command
         user_cmd_sub_ = this->create_subscription<geometry_msgs::msg::Twist>(
@@ -34,7 +44,7 @@ public:
         // publisher to cmd_vel
         cmd_vel_pub_ = this->create_publisher<geometry_msgs::msg::Twist>("/cmd_vel", 10);
 
-        RCLCPP_INFO(this->get_logger(), "Published initial stop on /cmd_vel");
+        RCLCPP_INFO(this->get_logger(), "cmd_vel publisher created");
 
         // TIMER
         timer_ = this->create_wall_timer(
@@ -43,6 +53,12 @@ public:
     }
 
 private:
+    // DEBUG FEATURES
+    bool debug_mode_ = false;
+    double debug_period_ = 1.0;
+    rclcpp::Time last_debug_time_;
+
+    // VARIABLES + CONTROLS STATE
     // variable to store the last command
     geometry_msgs::msg::Twist last_user_cmd_;
 
@@ -53,10 +69,20 @@ private:
 
     double current_x_ = 0.0;
     double current_y_ = 0.0;
-    bool have_odom_ = false;
+    bool have_odom_ = false; // control if the odom is arrived
 
     double yaw_ = 0.0;
+    double threshold_ = 0.8; // default (meters)
 
+    double safe_x_ = 0.0;
+    double safe_y_ = 0.0;
+    double safe_yaw_ = 0.0;
+    bool have_safe_pose_ = false; // control if the safe pose is arrived
+
+    bool recovery_mode_ = false; // control if the recovery mode is activated
+    bool is_moving_cmd_ = false; // control if the robot is moving
+
+    // INTERNAL FUNCTIONS
     // given an angle normalize it to [-pi, +pi]
     static double normalizeAngle(double angle)
     {
@@ -83,7 +109,7 @@ private:
         return 2;
     }
 
-    // convert a sector expresseb by an int into a string
+    // convert a sector expressed by an int into a string
     static const char *sectorToString(uint8_t sector)
     {
         switch (sector)
@@ -101,22 +127,47 @@ private:
         }
     }
 
+    // control if the obstacle is in forward position
+    bool isCommandTowardObstacle() const
+    {
+        const double v = last_user_cmd_.linear.x;
+        const double w = last_user_cmd_.angular.z;
+
+        switch (obstacle_sector_)
+        {
+        case 0:
+            return v > 0.0; // FRONT
+        case 2:
+            return v < 0.0; // BACK
+        case 1:
+            return w > 0.0; // LEFT
+        case 3:
+            return w < 0.0; // RIGHT
+        default:
+            return false;
+        }
+    }
+
     // CALLBACKS
     // user command callback:
     void userCommandCallback(const geometry_msgs::msg::Twist::SharedPtr msg)
     {
         last_user_cmd_ = *msg;
-        RCLCPP_INFO(this->get_logger(), "Got user cmd: lin.x=%.2f ang.z=%.2f",
-                    msg->linear.x, msg->angular.z);
-
         have_user_cmd_ = true;
+
+        // set that the robot is moving
+        is_moving_cmd_ = (std::fabs(msg->linear.x) > 1e-3) || (std::fabs(msg->angular.z) > 1e-3);
+
+        if (debug_mode_)
+        {
+            RCLCPP_INFO(this->get_logger(), "Got user cmd: lin.x=%.2f ang.z=%.2f",
+                        msg->linear.x, msg->angular.z);
+        }
     }
 
     // scanner callback:
     void scannerCallback(const sensor_msgs::msg::LaserScan::SharedPtr msg)
     {
-        RCLCPP_INFO(this->get_logger(), "Received scan");
-
         float closest_distance = std::numeric_limits<float>::infinity();
         int closest_distance_index = -1;
 
@@ -141,38 +192,35 @@ private:
             angle = normalizeAngle(angle);
             min_distance_ = closest_distance;
             obstacle_sector_ = sectorClassifier(angle);
-
-            RCLCPP_INFO(
-                this->get_logger(),
-                "Closest obstacle: %.2f m | angle %.2f rad | sector %s",
-                min_distance_,
-                angle,
-                sectorToString(obstacle_sector_));
         }
     }
 
-    // odometry callback: odometry is a quaternion so we need to extract waw,pitch,roll with "tf2"
+    // odometry callback: odometry orientation is a quaternion, we use tf2 for extracting yaw,pitch,roll
     void odomCallback(const nav_msgs::msg::Odometry::SharedPtr msg)
     {
-        RCLCPP_INFO(this->get_logger(), "Received odometry");
+        if (!have_safe_pose_)
+        {
+            safe_x_ = current_x_;
+            safe_y_ = current_y_;
+            safe_yaw_ = yaw_;
+            have_safe_pose_ = true;
+        }
 
         yaw_ = tf2::getYaw(msg->pose.pose.orientation);
 
         current_x_ = msg->pose.pose.position.x;
         current_y_ = msg->pose.pose.position.y;
         have_odom_ = true;
-
-        if (have_odom_)
-        {
-            RCLCPP_INFO(this->get_logger(), "Odom: x=%.2f y=%.2f", current_x_, current_y_);
-            RCLCPP_INFO(this->get_logger(), "Pose: x=%.2f y=%.2f yaw=%.2f", current_x_, current_y_, yaw_);
-
-        }
     }
 
-    // timer callback
+    // timer callback: where decisions are taken
     void controlLoop()
     {
+        if (!recovery_mode_ && have_safe_pose_ && have_user_cmd_ && std::isfinite(min_distance_) && min_distance_ < threshold_ && isCommandTowardObstacle())
+        {
+            recovery_mode_ = true;
+        }
+
         if (have_user_cmd_)
         {
             cmd_vel_pub_->publish(last_user_cmd_);
@@ -181,6 +229,34 @@ private:
         {
             geometry_msgs::msg::Twist stop;
             cmd_vel_pub_->publish(stop);
+        }
+
+        if (have_odom_ && std::isfinite(min_distance_) && min_distance_ >= threshold_)
+        {
+            safe_x_ = current_x_;
+            safe_y_ = current_y_;
+            safe_yaw_ = yaw_;
+            have_safe_pose_ = true;
+        }
+
+        if (debug_mode_)
+        {
+            auto t = this->now();
+            if ((t - last_debug_time_).seconds() >= debug_period_)
+            {
+                RCLCPP_INFO(this->get_logger(),
+                            "pose(x=%.2f y=%.2f yaw=%.2f) | min=%.2f sector=%s | thr=%.2f | safe=%d",
+                            current_x_, current_y_, yaw_,
+                            min_distance_, sectorToString(obstacle_sector_),
+                            threshold_,
+                            have_safe_pose_ ? 1 : 0);
+                last_debug_time_ = t;
+
+                if (recovery_mode_)
+                {
+                    RCLCPP_WARN(this->get_logger(), "RECOVERY ENTERED");
+                }
+            }
         }
     }
 
