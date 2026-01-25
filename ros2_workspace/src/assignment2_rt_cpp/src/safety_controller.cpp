@@ -6,7 +6,8 @@
 #include <tf2/utils.h>
 #include "assignment2_rt_cpp/msg/obstacle_info.hpp"
 #include "assignment2_rt_cpp/srv/set_threshold.hpp"
-
+#include "assignment2_rt_cpp/srv/get_last5_input_avg.hpp"
+#include <deque>
 #include <chrono>
 #include <limits>
 #include <cmath>
@@ -68,6 +69,11 @@ public:
             "/set_threshold",
             std::bind(&SafetyController::setThresholdCallback, this,
                       std::placeholders::_1, std::placeholders::_2));
+
+        // last 5 user inputs average
+        avg_srv_ = this->create_service<assignment2_rt_cpp::srv::GetLast5InputAvg>(
+            "/get_last5_input_avg",
+            std::bind(&SafetyController::avgCallback, this, std::placeholders::_1, std::placeholders::_2));
     }
 
 private:
@@ -215,6 +221,14 @@ private:
         if (moving)
         {
             cmd_active_ = true;
+
+            last_lin_.push_back(msg->linear.x);
+            last_ang_.push_back(msg->angular.z);
+
+            if (last_lin_.size() > MAX_SAMPLES)
+                last_lin_.pop_front();
+            if (last_ang_.size() > MAX_SAMPLES)
+                last_ang_.pop_front();
         }
         else
         {
@@ -411,6 +425,32 @@ private:
         response->current_threshold = static_cast<float>(threshold_);
     }
 
+    // last 5 average user's input callback
+    void avgCallback(
+        const std::shared_ptr<assignment2_rt_cpp::srv::GetLast5InputAvg::Request> /*request*/,
+        std::shared_ptr<assignment2_rt_cpp::srv::GetLast5InputAvg::Response> response)
+    {
+        const uint8_t n = static_cast<uint8_t>(last_lin_.size());
+        response->count = n;
+
+        if (n == 0)
+        {
+            response->avg_linear_x = 0.0f;
+            response->avg_angular_z = 0.0f;
+            return;
+        }
+
+        double sum_lin = 0.0, sum_ang = 0.0;
+        for (size_t i = 0; i < last_lin_.size(); ++i)
+        {
+            sum_lin += last_lin_[i];
+            sum_ang += last_ang_[i];
+        }
+
+        response->avg_linear_x = static_cast<float>(sum_lin / n);
+        response->avg_angular_z = static_cast<float>(sum_ang / n);
+    }
+
     // SUBSCRIBERS INTERFACES
     rclcpp::Subscription<geometry_msgs::msg::Twist>::SharedPtr user_cmd_sub_;
     rclcpp::Subscription<sensor_msgs::msg::LaserScan>::SharedPtr scanner_sub_;
@@ -425,6 +465,11 @@ private:
 
     // SERVICES INTERFACES
     rclcpp::Service<assignment2_rt_cpp::srv::SetThreshold>::SharedPtr set_threshold_srv_;
+    rclcpp::Service<assignment2_rt_cpp::srv::GetLast5InputAvg>::SharedPtr avg_srv_;
+
+    std::deque<double> last_lin_;
+    std::deque<double> last_ang_;
+    static constexpr size_t MAX_SAMPLES = 5;
 };
 
 int main(int argc, char **argv)
