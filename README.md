@@ -160,7 +160,7 @@ The entire system is implemented in C++ using ROS2.
 The system is composed of **two ROS2 nodes**:
 
 ### 1. Teleop Interface Node (`teleop_interface`)
-This node provides a terminal-based interface that allows the user to:
+This node provides a CLI (Linux-Command-Line-Interface) that allows the user to:
 
 - Insert linear velocity
 - Insert angular velocity
@@ -336,7 +336,7 @@ This launch file starts:
 - Loads parameters from the YAML file
 
 The teleop node is intentionally **not launched automatically**
-and should be started manually by the user.
+and should be started manually by the user, since it is a CLI.
 
 ---
 
@@ -353,7 +353,7 @@ source install/setup.bash
 ## Running the System
 
 ### 1. Start the Simulation Environment
-(Provided by the course)
+(Provided by the professor)
 
 ### 2. Launch the Safety Controller
 ```
@@ -394,4 +394,8 @@ ros2 topic echo /obstacle_info
 - Extensive logging is available via debug parameters
 
 This assignment demonstrates a complete ROS2 system integrating:
-sensing, control, safety, services, and configuration management.
+- Sensing 
+- Control  
+- Safety
+- Services
+- Configuration managemen
