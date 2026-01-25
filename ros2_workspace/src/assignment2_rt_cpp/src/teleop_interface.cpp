@@ -12,7 +12,7 @@ public:
             "/user_cmd_vel", 10);
 
         // default parameters
-        this->declare_parameter<int>("command_duration", 5.0); // standard command duration = 5
+        this->declare_parameter<int>("command_duration", 5); // standard command duration = 5
     }
 
     void run()
@@ -21,7 +21,7 @@ public:
         {
             // initialize control variables
             double linear_velocity = 0.0, angular_velocity = 0.0;
-            int user_duration = 0.0;
+            int user_duration = 0;
             int command_duration = this->get_parameter("command_duration").as_int();
 
             // ask to the user the values of controls variables
@@ -33,7 +33,7 @@ public:
                       << command_duration << "): ";
             std::cin >> user_duration;
 
-            if (user_duration > 0.0)
+            if (user_duration > 0)
             {
                 command_duration = user_duration;
             }
@@ -43,7 +43,7 @@ public:
             msg.linear.x = linear_velocity;
             msg.angular.z = angular_velocity;
 
-            // send message for user commad duration(seconds)
+            // send message for user command_duration(seconds)
             rclcpp::Rate rate(10);
             auto start = now();
 
@@ -54,7 +54,7 @@ public:
                 rate.sleep();
             }
 
-            // stop moving after 1 second
+            // stop moving after command_duration period(seconds)
             msg.linear.x = 0.0;
             msg.angular.z = 0.0;
 

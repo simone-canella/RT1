@@ -180,27 +180,6 @@ private:
         }
     }
 
-    // control if the obstacle is in forward position
-    bool isCommandTowardObstacle() const
-    {
-        const double v = last_user_cmd_.linear.x;
-        const double w = last_user_cmd_.angular.z;
-
-        switch (obstacle_sector_)
-        {
-        case 0:
-            return v > 0.0; // FRONT
-        case 2:
-            return v < 0.0; // BACK
-        case 1:
-            return w > 0.0; // LEFT
-        case 3:
-            return w < 0.0; // RIGHT
-        default:
-            return false;
-        }
-    }
-
     // clamp helper
     static double clamp(double v, double lo, double hi)
     {
@@ -278,7 +257,7 @@ private:
         }
     }
 
-    // odometry callback: odometry orientation is a quaternion, we use tf2 for extracting yaw,pitch,roll
+    // odometry callback: odometry orientation is a quaternion, we use tf2 for extracting yaw
     void odomCallback(const nav_msgs::msg::Odometry::SharedPtr msg)
     {
         yaw_ = tf2::getYaw(msg->pose.pose.orientation);
@@ -300,6 +279,13 @@ private:
     // timer callback: where decisions are taken
     void controlLoop()
     {
+        // publish obstacle information with the custom message "ObstacleInfo"
+        assignment2_rt_cpp::msg::ObstacleInfo info;
+        info.closest_distance = static_cast<float>(min_distance_);
+        info.direction = obstacle_sector_;
+        info.threshold = static_cast<float>(threshold_);
+        obstacle_pub_->publish(info);
+
         // SAFE POSE UPDATE
         // apply safe-pose update only after a safe user command ended
         if (!recovery_mode_ && pending_safe_update_ && have_odom_)
@@ -387,13 +373,6 @@ private:
             geometry_msgs::msg::Twist stop;
             cmd_vel_pub_->publish(stop);
         }
-
-        // publish obstacle information with the custom message "ObstacleInfo"
-        assignment2_rt_cpp::msg::ObstacleInfo info;
-        info.closest_distance = static_cast<float>(min_distance_);
-        info.direction = obstacle_sector_;
-        info.threshold = static_cast<float>(threshold_);
-        obstacle_pub_->publish(info);
 
         // DEBUGGING
         // print log for debugging

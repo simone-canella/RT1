@@ -1,0 +1,7 @@
+safety_controller:
+  ros__parameters:
+    threshold: 0.8
+
+    debug: true
+    debug_period: 1.0
+
