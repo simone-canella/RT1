@@ -1,6 +1,7 @@
 #include "rclcpp/rclcpp.hpp"
 #include "geometry_msgs/msg/twist.hpp"
 #include "std_msgs/msg/string.hpp"
+#include "assignment1_rt/msg/velocity_info.hpp"   
 #include <iostream>
 
 class UI : public rclcpp::Node {
@@ -14,6 +15,12 @@ public:
             "/stop_movement",
             10,
             std::bind(&UI::stop_callback, this, std::placeholders::_1));
+
+        // NEW: publisher of custom message with velocity info
+        velocity_info_pub_ = this->create_publisher<assignment1_rt::msg::VelocityInfo>(
+            "/velocity_info",
+            10
+        );
 
         while (rclcpp::ok()) {
             std::string turtle; // string that contains the name of the selected turtle
@@ -63,6 +70,14 @@ public:
             while (!force_stop_ && (now() - start).seconds() < 1.0 && rclcpp::ok()) {
                 // publish the velocity of the moving turtle
                 publisher_->publish(message);
+
+                // NEW: publish custom message at EACH ITERATION
+                assignment1_rt::msg::VelocityInfo vinfo;
+                vinfo.label = "velocity";          // <-- requested string
+                vinfo.linear_x = cmd.linear.x;     // <-- requested linear x
+                vinfo.angular_z = cmd.angular.z;   // <-- requested angular z
+                velocity_info_pub_->publish(vinfo);
+
                 rclcpp::spin_some(this->get_node_base_interface());
                 rate.sleep();
             }
@@ -71,6 +86,13 @@ public:
             message.linear.x = 0;
             message.angular.z = 0;
             publisher_->publish(message);
+
+            // NEW: also publish the stop velocity on the custom topic (consistent)
+            assignment1_rt::msg::VelocityInfo stop_vinfo;
+            stop_vinfo.label = "velocity";
+            stop_vinfo.linear_x = 0.0f;
+            stop_vinfo.angular_z = 0.0f;
+            velocity_info_pub_->publish(stop_vinfo);
 
             std::cout << "Command finished. Insert new command...\n";
         }
@@ -83,6 +105,9 @@ private:
     rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr publisher_;
     rclcpp::Publisher<std_msgs::msg::String>::SharedPtr moving_turtle_pub_;
     rclcpp::Subscription<std_msgs::msg::String>::SharedPtr stop_sub_;
+
+     // NEW: publisher of custom message
+    rclcpp::Publisher<assignment1_rt::msg::VelocityInfo>::SharedPtr velocity_info_pub_;
 
     // callback for setting the stop boolean to true (set by distance_node)
     void stop_callback(const std_msgs::msg::String::SharedPtr msg) {

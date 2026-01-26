@@ -3,6 +3,7 @@
 #include "std_msgs/msg/string.hpp"
 #include "std_msgs/msg/float32.hpp"
 #include "geometry_msgs/msg/twist.hpp"
+#include "assignment1_rt/msg/velocity_info.hpp"   
 #include <iostream>
 #include <cmath>
 
@@ -40,6 +41,12 @@ public:
         turtle1_stop_pub_ = this->create_publisher<geometry_msgs::msg::Twist>("/turtle1/cmd_vel", 10);
         turtle2_stop_pub_ = this->create_publisher<geometry_msgs::msg::Twist>("/turtle2/cmd_vel", 10);
         stop_pub_ = this->create_publisher<std_msgs::msg::String>("/stop_movement", 10);
+
+        // NEW: publish custom velocity info when we command a stop (0,0)
+        velocity_info_pub_ = this->create_publisher<assignment1_rt::msg::VelocityInfo>(
+            "/velocity_info",
+            10
+        );
         
         // === TIMER ===
         // timer for periodic distance computation and safety checks (10 Hz)
@@ -85,6 +92,16 @@ private:
         moving_turtle_ = msg->data;
         RCLCPP_INFO(this->get_logger(), "Currently moving turtle: %s", moving_turtle_.c_str());
     }
+
+    void publish_velocity_info(float lin_x, float ang_z)
+    {
+        // NEW helper: publish custom message with string "velocity" + current commanded values
+        assignment1_rt::msg::VelocityInfo vinfo;
+        vinfo.label = "velocity";   // <-- requested string
+        vinfo.linear_x = lin_x;
+        vinfo.angular_z = ang_z;
+        velocity_info_pub_->publish(vinfo);
+    }
     
     // timer callback: where live distance computation + safety logic
     void timer_callback()
@@ -111,6 +128,9 @@ private:
 
             turtle1_stop_pub_->publish(stop_message);
 
+             // NEW: publish "velocity" + (0,0) on custom topic
+            publish_velocity_info(0.0f, 0.0f);
+
             std_msgs::msg::String stop_msg;
             stop_msg.data = "stop";
             stop_pub_->publish(stop_msg);
@@ -130,6 +150,10 @@ private:
             stop_message.angular.z = 0; 
 
             turtle2_stop_pub_->publish(stop_message);
+
+             // NEW: publish "velocity" + (0,0) on custom topic
+            publish_velocity_info(0.0f, 0.0f);
+
 
             std_msgs::msg::String stop_msg;
             stop_msg.data = "stop";
@@ -151,6 +175,9 @@ private:
     rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr turtle2_stop_pub_;
     rclcpp::Publisher<std_msgs::msg::String>::SharedPtr stop_pub_;
 
+    // NEW: custom message publisher
+    rclcpp::Publisher<assignment1_rt::msg::VelocityInfo>::SharedPtr velocity_info_pub_;
+    
     // timer
     rclcpp::TimerBase::SharedPtr timer_;
 };

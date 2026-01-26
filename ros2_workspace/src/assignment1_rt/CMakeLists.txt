@@ -14,11 +14,22 @@ find_package(rclcpp REQUIRED)
 find_package(geometry_msgs REQUIRED)
 find_package(std_msgs REQUIRED)
 find_package(turtlesim REQUIRED)
+find_package(rosidl_default_generators REQUIRED)
+
+rosidl_generate_interfaces(${PROJECT_NAME}
+  "msg/VelocityInfo.msg"
+  DEPENDENCIES std_msgs
+)
+
+ament_export_dependencies(rosidl_default_runtime)
 
 add_executable(ui_node src/UI.cpp)
 ament_target_dependencies(ui_node rclcpp geometry_msgs std_msgs)
 add_executable(distance_node src/distance.cpp)
 ament_target_dependencies(distance_node rclcpp std_msgs geometry_msgs turtlesim)
+
+rosidl_target_interfaces(ui_node ${PROJECT_NAME} "rosidl_typesupport_cpp")
+rosidl_target_interfaces(distance_node ${PROJECT_NAME} "rosidl_typesupport_cpp")
 
 install(
   TARGETS 
