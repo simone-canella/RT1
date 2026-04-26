@@ -1,0 +1,11 @@
+# Goal: Where we want the robot to go
+float64 x
+float64 y
+float64 theta
+---
+# Result: The final outcome
+bool success
+---
+# Feedback: Current status during movement
+float64 dist_x
+float64 dist_y
