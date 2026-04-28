@@ -13,6 +13,7 @@
 #include <tf2_ros/buffer.h>
 #include <tf2_geometry_msgs/tf2_geometry_msgs.hpp>
 
+#define THRESHOLD 0.1
 
 namespace assignment1_rt2
 {
@@ -30,8 +31,8 @@ namespace assignment1_rt2
             using namespace std::placeholders;
 
             // TF2 LOCALIZATION SYSTEM
-            // initialize tf2 BUFFER and LISTENER 
-            tf2_buffer_ = std::make_shared<tf2_ros::Buffer>(this->get_clock()); 
+            // initialize tf2 BUFFER and LISTENER
+            tf2_buffer_ = std::make_shared<tf2_ros::Buffer>(this->get_clock());
             tf2_listener_ = std::make_shared<tf2_ros::TransformListener>(*tf2_buffer_);
             RCLCPP_INFO(this->get_logger(), "TF2 Senses initialized.");
 
@@ -54,10 +55,10 @@ namespace assignment1_rt2
         // OBJECTS
         // create the action server object
         rclcpp_action::Server<RobotTarget>::SharedPtr action_server_;
-        //publisher
+        // publisher
         rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr cmd_vel_pub_;
 
-        // TF2 LOCALIZATION SYSTEM 
+        // TF2 LOCALIZATION SYSTEM
         std::shared_ptr<tf2_ros::Buffer> tf2_buffer_;
         std::shared_ptr<tf2_ros::TransformListener> tf2_listener_;
 
@@ -92,6 +93,14 @@ namespace assignment1_rt2
         // PROCESSING AND UPDATES FUNCTION
         void execute(const std::shared_ptr<GoalHandleRobotTarget> goal_handle)
         {
+            // declare variables
+            double current_x = 0.0;
+            double current_y = 0.0;
+            double current_yaw = 0.0;
+            double distance_to_goal = 0.0;
+            double desired_yaw = 0.0;
+            double yaw_error = 0.0;
+
             RCLCPP_INFO(this->get_logger(), "Executing goal...");
 
             // get the goal data from the goal_handle
@@ -105,9 +114,11 @@ namespace assignment1_rt2
             rclcpp::Rate loop_rate(10);
 
             // execution loop
-            while (rclcpp::ok()) {
+            while (rclcpp::ok())
+            {
                 // check if the action is cancelled
-                if (goal_handle->is_canceling()) {
+                if (goal_handle->is_canceling())
+                {
                     result->success = false;
                     goal_handle->canceled(result);
                     cmd_vel_pub_->publish(geometry_msgs::msg::Twist{});
@@ -118,9 +129,41 @@ namespace assignment1_rt2
                 // declare message variable
                 geometry_msgs::msg::TransformStamped transform;
 
-                try {
+                // position tracking block
+                try
+                {
                     transform = tf2_buffer_->lookupTransform("map", "base_link", tf2::TimePointZero);
-                } catch (const tf2::TransformException & ex){
+
+                    // extract current position and orientation
+                    current_x = transform.transform.translation.x;
+                    current_y = transform.transform.translation.y;
+
+                    current_yaw = tf2::getYaw(transform.transform.rotation);
+
+                    // compute distance between robot and goal
+                    double difference_x = goal->x - current_x;
+                    double difference_y = goal->y - current_y;
+
+                    distance_to_goal = std::hypot(difference_x, difference_y);
+
+                    // update feedback
+                    feedback->dist_x = difference_x;
+                    feedback->dist_y = difference_y;
+
+                    goal_handle->publish_feedback(feedback);
+                    RCLCPP_INFO(this->get_logger(), "Distance to goal: %f", distance_to_goal);
+
+                    // stop when the goal is reached
+                    if (distance_to_goal < THRESHOLD)
+                    {
+                        cmd_vel_pub_->publish(geometry_msgs::msg::Twist{});
+
+                        RCLCPP_INFO(this->get_logger(), "Goal reached");
+                        break;
+                    }
+                }
+                catch (const tf2::TransformException &ex)
+                {
                     RCLCPP_INFO(this->get_logger(), "Could not transform map to base_link: %s", ex.what());
 
                     // wait for the next loop
@@ -131,7 +174,8 @@ namespace assignment1_rt2
                 loop_rate.sleep();
             }
 
-            if (rclcpp::ok()) {
+            if (rclcpp::ok())
+            {
                 result->success = true;
                 goal_handle->succeed(result);
                 RCLCPP_INFO(this->get_logger(), "Goal reached!");
