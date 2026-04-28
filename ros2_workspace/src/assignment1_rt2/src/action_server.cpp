@@ -6,10 +6,13 @@
 #include "assignment1_rt2_interfaces/action/robot_target.hpp"
 
 #include <geometry_msgs/msg/twist.hpp>
+#include <geometry_msgs/msg/transform_stamped.hpp>
+#include <tf2/utils.h>
+#include <tf2/exceptions.hpp>
 #include <tf2_ros/transform_listener.h>
 #include <tf2_ros/buffer.h>
 #include <tf2_geometry_msgs/tf2_geometry_msgs.hpp>
-#include <tf2/utils.h>
+
 
 namespace assignment1_rt2
 {
@@ -89,12 +92,50 @@ namespace assignment1_rt2
         // PROCESSING AND UPDATES FUNCTION
         void execute(const std::shared_ptr<GoalHandleRobotTarget> goal_handle)
         {
-            RCLCPP_INFO(this->get_logger(), "Executing goal");
+            RCLCPP_INFO(this->get_logger(), "Executing goal...");
+
+            // get the goal data from the goal_handle
+            const auto goal = goal_handle->get_goal();
+
+            // create an instance for "feedback" and "result"
+            auto feedback = std::make_shared<RobotTarget::Feedback>();
             auto result = std::make_shared<RobotTarget::Result>();
 
-            result->success = true;
-            goal_handle->succeed(result);
-            RCLCPP_INFO(this->get_logger(), "Goal reached!");
+            // define the frequency rate
+            rclcpp::Rate loop_rate(10);
+
+            // execution loop
+            while (rclcpp::ok()) {
+                // check if the action is cancelled
+                if (goal_handle->is_canceling()) {
+                    result->success = false;
+                    goal_handle->canceled(result);
+                    cmd_vel_pub_->publish(geometry_msgs::msg::Twist{});
+
+                    return;
+                }
+
+                // declare message variable
+                geometry_msgs::msg::TransformStamped transform;
+
+                try {
+                    transform = tf2_buffer_->lookupTransform("map", "base_link", tf2::TimePointZero);
+                } catch (const tf2::TransformException & ex){
+                    RCLCPP_INFO(this->get_logger(), "Could not transform map to base_link: %s", ex.what());
+
+                    // wait for the next loop
+                    loop_rate.sleep();
+                    continue;
+                }
+
+                loop_rate.sleep();
+            }
+
+            if (rclcpp::ok()) {
+                result->success = true;
+                goal_handle->succeed(result);
+                RCLCPP_INFO(this->get_logger(), "Goal reached!");
+            }
         }
     };
 }
