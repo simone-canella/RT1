@@ -1,5 +1,6 @@
 #include <iostream>
 #include <thread>
+#include <cmath>
 #include <rclcpp/rclcpp.hpp>
 #include <rclcpp_action/rclcpp_action.hpp>
 #include <rclcpp_components/register_node_macro.hpp>
@@ -13,7 +14,9 @@
 #include <tf2_ros/buffer.h>
 #include <tf2_geometry_msgs/tf2_geometry_msgs.hpp>
 
-#define THRESHOLD 0.1
+#define THRESHOLD 0.1    // distance threshold between current and goal positions
+#define LINEAR_GAIN 0.5  // linear velocity gain for proportional logic controller
+#define ANGULAR_GAIN 1.0 // angular velocity gain for proportional logic controller
 
 namespace assignment1_rt2
 {
@@ -113,7 +116,7 @@ namespace assignment1_rt2
             // define the frequency rate
             rclcpp::Rate loop_rate(10);
 
-            // execution loop
+            // navigation loop
             while (rclcpp::ok())
             {
                 // check if the action is cancelled
@@ -153,6 +156,21 @@ namespace assignment1_rt2
                     goal_handle->publish_feedback(feedback);
                     RCLCPP_INFO(this->get_logger(), "Distance to goal: %f", distance_to_goal);
 
+                    // compute desired heading and heading error
+                    desired_yaw = std::atan2(difference_y, difference_x);
+
+                    yaw_error = normalizeAngle(desired_yaw - current_yaw);
+
+                    // create command message
+                    auto move_msg = geometry_msgs::msg::Twist();
+
+                    // proportional control logic
+                    move_msg.linear.x = LINEAR_GAIN * distance_to_goal;
+                    move_msg.angular.z = ANGULAR_GAIN * yaw_error;
+
+                    // send message
+                    cmd_vel_pub_->publish(move_msg);
+
                     // stop when the goal is reached
                     if (distance_to_goal < THRESHOLD)
                     {
@@ -180,6 +198,17 @@ namespace assignment1_rt2
                 goal_handle->succeed(result);
                 RCLCPP_INFO(this->get_logger(), "Goal reached!");
             }
+        }
+
+        // INTERNAL FUNCTIONS
+        // given an angle normalize it to [-pi, +pi]
+        static double normalizeAngle(double angle)
+        {
+            while (angle > M_PI)
+                angle -= 2.0 * M_PI;
+            while (angle < -M_PI)
+                angle += 2.0 * M_PI;
+            return angle;
         }
     };
 }
