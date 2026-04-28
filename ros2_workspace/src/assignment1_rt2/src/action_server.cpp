@@ -17,6 +17,7 @@
 #define THRESHOLD 0.1    // distance threshold between current and goal positions
 #define LINEAR_GAIN 0.5  // linear velocity gain for proportional logic controller
 #define ANGULAR_GAIN 1.0 // angular velocity gain for proportional logic controller
+#define MAX_SPEED 1.0 // max value that the robot could move
 
 namespace assignment1_rt2
 {
@@ -165,8 +166,8 @@ namespace assignment1_rt2
                     auto move_msg = geometry_msgs::msg::Twist();
 
                     // proportional control logic
-                    move_msg.linear.x = LINEAR_GAIN * distance_to_goal;
-                    move_msg.angular.z = ANGULAR_GAIN * yaw_error;
+                    move_msg.linear.x = std::min(MAX_SPEED, LINEAR_GAIN * distance_to_goal);
+                    move_msg.angular.z = std::min(MAX_SPEED, ANGULAR_GAIN * yaw_error);
 
                     // send message
                     cmd_vel_pub_->publish(move_msg);
