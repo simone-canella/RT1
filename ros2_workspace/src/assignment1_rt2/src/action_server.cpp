@@ -1,6 +1,7 @@
 #include <iostream>
 #include <thread>
 #include <cmath>
+#include <algorithm>
 #include <rclcpp/rclcpp.hpp>
 #include <rclcpp_action/rclcpp_action.hpp>
 #include <rclcpp_components/register_node_macro.hpp>
@@ -166,8 +167,8 @@ namespace assignment1_rt2
                     auto move_msg = geometry_msgs::msg::Twist();
 
                     // proportional control logic
-                    move_msg.linear.x = std::min(MAX_SPEED, LINEAR_GAIN * distance_to_goal);
-                    move_msg.angular.z = std::min(MAX_SPEED, ANGULAR_GAIN * yaw_error);
+                    move_msg.linear.x = std::clamp(LINEAR_GAIN * distance_to_goal, 0.0, MAX_SPEED);
+                    move_msg.angular.z = std::clamp(ANGULAR_GAIN * yaw_error, -MAX_SPEED, MAX_SPEED);
 
                     // send message
                     cmd_vel_pub_->publish(move_msg);
