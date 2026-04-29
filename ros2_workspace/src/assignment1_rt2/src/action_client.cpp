@@ -7,6 +7,8 @@
 #include "rclcpp_action/rclcpp_action.hpp"
 #include "assignment1_rt2_interfaces/action/robot_target.hpp"
 
+#include "rclcpp_components/register_node_macro.hpp"
+
 namespace assignment1_rt2
 {
     class RobotActionClient : public rclcpp::Node
@@ -136,4 +138,24 @@ namespace assignment1_rt2
             this->client_ptr_->async_send_goal(goal_msg, send_goal_options);
         }
     };
+}
+
+// macro for recognize that is a loadable component
+RCLCPP_COMPONENTS_REGISTER_NODE(assignment1_rt2::RobotActionClient)
+
+// entry point to start the node
+int main(int argc, char ** argv)
+{
+  // initialize ROS 2 communication
+  rclcpp::init(argc, argv);
+
+  // create the node instance
+  auto node = std::make_shared<assignment1_rt2::RobotActionClient>(rclcpp::NodeOptions());
+
+  // keep the node alive to process callbacks (Feedback/Results)
+  rclcpp::spin(node);
+
+  // shutdown 
+  rclcpp::shutdown();
+  return 0;
 }
