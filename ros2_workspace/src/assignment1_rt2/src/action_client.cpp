@@ -41,11 +41,24 @@ namespace assignment1_rt2
         // create the action client object
         rclcpp_action::Client<RobotTarget>::SharedPtr client_ptr_;
 
+        // CALLBACK
+        // goal response callback
+        void goal_response_callback(const GoalHandleRobotTarget::SharedPtr &goal_handle)
+        {
+            if (!goal_handle)
+            {
+                RCLCPP_INFO(this->get_logger(), "Goal was rejected by the server");
+            }
+            else
+            {
+                RCLCPP_INFO(this->get_logger(), "Goal was accepeted by the server, waiting for result...");
+            }
+        }
+
         // INTERNAL FUNCTIONS
         // loop for user's inputs
         void ui_loop()
         {
-
             while (rclcpp::ok())
             {
                 double x, y, theta;
@@ -68,6 +81,8 @@ namespace assignment1_rt2
         // send the goal position to the action server
         void send_goal(double x, double y, double theta)
         {
+            RCLCPP_INFO(this->get_logger(), "Sending goal coordinates to the server...");
+
             // create goal message
             auto goal_msg = RobotTarget::Goal();
 
@@ -75,10 +90,15 @@ namespace assignment1_rt2
             goal_msg.y = y;
             goal_msg.theta = theta;
 
-            RCLCPP_INFO(this->get_logger(), "Sending goal coordinates to the server...");
+            // create a setting for the goal
+            auto send_goal_options = rclcpp_action::Client<RobotTarget>::SendGoalOptions();
+
+            // link the callback with the setting
+            send_goal_options.goal_response_callback =
+                std::bind(&RobotActionClient::goal_response_callback, this, std::placeholders::_1);
 
             // send message
-            this->client_ptr_->async_send_goal(goal_msg);
+            this->client_ptr_->async_send_goal(goal_msg, send_goal_options);
         }
     };
 }
