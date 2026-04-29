@@ -15,10 +15,10 @@
 #include <tf2_ros/buffer.h>
 #include <tf2_geometry_msgs/tf2_geometry_msgs.hpp>
 
-#define THRESHOLD 0.1    // distance threshold between current and goal positions
+#define THRESHOLD 0.5    // distance threshold between current and goal positions
 #define LINEAR_GAIN 0.5  // linear velocity gain for proportional logic controller
 #define ANGULAR_GAIN 1.0 // angular velocity gain for proportional logic controller
-#define MAX_SPEED 1.0 // max value that the robot could move
+#define MAX_SPEED 1.0    // max value that the robot could move
 
 namespace assignment1_rt2
 {
@@ -137,7 +137,9 @@ namespace assignment1_rt2
                 // position tracking block
                 try
                 {
-                    transform = tf2_buffer_->lookupTransform("map", "base_link", tf2::TimePointZero);
+                    // transform = tf2_buffer_->lookupTransform("map", "base_link", tf2::TimePointZero);
+                    //  Use "odom" as the target and "base_link" as the source
+                    transform = tf2_buffer_->lookupTransform("odom", "base_link", tf2::TimePointZero);
 
                     // extract current position and orientation
                     current_x = transform.transform.translation.x;
