@@ -42,7 +42,7 @@ namespace assignment1_rt2
         rclcpp_action::Client<RobotTarget>::SharedPtr client_ptr_;
 
         // CALLBACK
-        // goal response callback
+        // control if the goal is accepted
         void goal_response_callback(const GoalHandleRobotTarget::SharedPtr &goal_handle)
         {
             if (!goal_handle)
@@ -51,8 +51,15 @@ namespace assignment1_rt2
             }
             else
             {
-                RCLCPP_INFO(this->get_logger(), "Goal was accepeted by the server, waiting for result...");
+                RCLCPP_INFO(this->get_logger(), "Goal accepeted by the server, waiting for result...");
             }
+        }
+
+        // control action server feedback
+        void feedback_callback(GoalHandleRobotTarget::SharedPtr,
+            const std::shared_ptr<const RobotTarget::Feedback> feedback)
+        {
+            RCLCPP_INFO(this->get_logger(), "Distance to goal: x=%f, y=%f", feedback->dist_x, feedback->dist_y);
         }
 
         // INTERNAL FUNCTIONS
@@ -93,9 +100,13 @@ namespace assignment1_rt2
             // create a setting for the goal
             auto send_goal_options = rclcpp_action::Client<RobotTarget>::SendGoalOptions();
 
-            // link the callback with the setting
+            // link the goal response callback with the setting
             send_goal_options.goal_response_callback =
                 std::bind(&RobotActionClient::goal_response_callback, this, std::placeholders::_1);
+
+            // link the feedback callback with the options
+            send_goal_options.feedback_callback =
+                std::bind(&RobotActionClient::feedback_callback, this, std::placeholders::_1, std::placeholders::_2);
 
             // send message
             this->client_ptr_->async_send_goal(goal_msg, send_goal_options);
