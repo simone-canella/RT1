@@ -42,7 +42,7 @@ namespace assignment1_rt2
         rclcpp_action::Client<RobotTarget>::SharedPtr client_ptr_;
 
         // CALLBACK
-        // control if the goal is accepted
+        // goal response callback: control if the goal is accepted
         void goal_response_callback(const GoalHandleRobotTarget::SharedPtr &goal_handle)
         {
             if (!goal_handle)
@@ -51,15 +51,35 @@ namespace assignment1_rt2
             }
             else
             {
-                RCLCPP_INFO(this->get_logger(), "Goal accepeted by the server, waiting for result...");
+                RCLCPP_INFO(this->get_logger(), "Goal accepted by the server, waiting for result...");
             }
         }
 
-        // control action server feedback
+        // feedback callback: control action server feedback
         void feedback_callback(GoalHandleRobotTarget::SharedPtr,
-            const std::shared_ptr<const RobotTarget::Feedback> feedback)
+                               const std::shared_ptr<const RobotTarget::Feedback> feedback)
         {
             RCLCPP_INFO(this->get_logger(), "Distance to goal: x=%f, y=%f", feedback->dist_x, feedback->dist_y);
+        }
+
+        // result callback: control the final result
+        void result_callback(const GoalHandleRobotTarget::WrappedResult &result)
+        {
+            switch (result.code)
+            {
+            case rclcpp_action::ResultCode::SUCCEEDED:
+                RCLCPP_INFO(this->get_logger(), "Mission Complete: Goal reached successfully!");
+                break;
+            case rclcpp_action::ResultCode::ABORTED:
+                RCLCPP_ERROR(this->get_logger(), "Mission Failed: The goal was aborted");
+                break;
+            case rclcpp_action::ResultCode::CANCELED:
+                RCLCPP_ERROR(this->get_logger(), "Mission Canceled");
+                break;
+            default:
+                RCLCPP_ERROR(this->get_logger(), "Unknown result code received");
+                break;
+            }
         }
 
         // INTERNAL FUNCTIONS
@@ -107,6 +127,10 @@ namespace assignment1_rt2
             // link the feedback callback with the options
             send_goal_options.feedback_callback =
                 std::bind(&RobotActionClient::feedback_callback, this, std::placeholders::_1, std::placeholders::_2);
+
+            // link the result callback with the options
+            send_goal_options.result_callback =
+                std::bind(&RobotActionClient::result_callback, this, std::placeholders::_1);
 
             // send message
             this->client_ptr_->async_send_goal(goal_msg, send_goal_options);
