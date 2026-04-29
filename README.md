@@ -512,8 +512,6 @@ source install/setup.bash
   ```
 ---
 
-### 6. Expected Behavior
-```markdown
 ## Expected Behavior
 
 - **Interactive Input:** The user enters coordinates as a single line (e.g., `2.0 1.5 0.0`).
