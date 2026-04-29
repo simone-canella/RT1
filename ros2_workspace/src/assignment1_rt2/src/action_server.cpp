@@ -90,8 +90,7 @@ namespace assignment1_rt2
         // Handle what happens after acceptance
         void handle_accepted(const std::shared_ptr<GoalHandleRobotTarget> goal_handle)
         {
-            // This needs to return quickly, so we usually spin up a thread
-            // to do the actual driving logic!
+            // spin up a thread
             std::thread{std::bind(&RobotActionServer::execute, this, std::placeholders::_1), goal_handle}.detach();
         }
 
@@ -137,9 +136,9 @@ namespace assignment1_rt2
                 // position tracking block
                 try
                 {
-                    // transform = tf2_buffer_->lookupTransform("map", "base_link", tf2::TimePointZero);
-                    //  Use "odom" as the target and "base_link" as the source
-                    transform = tf2_buffer_->lookupTransform("odom", "base_link", tf2::TimePointZero);
+                    // OLD COMMAND: transform = tf2_buffer_->lookupTransform("map", "base_link", tf2::TimePointZero);
+                    //  use "odom" as the target and "base_footprint" as the source
+                    transform = tf2_buffer_->lookupTransform("odom", "base_footprint", tf2::TimePointZero);
 
                     // extract current position and orientation
                     current_x = transform.transform.translation.x;
