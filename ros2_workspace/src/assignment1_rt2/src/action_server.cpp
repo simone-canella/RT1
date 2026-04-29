@@ -15,7 +15,7 @@
 #include <tf2_ros/buffer.h>
 #include <tf2_geometry_msgs/tf2_geometry_msgs.hpp>
 
-#define THRESHOLD 0.5    // distance threshold between current and goal positions
+#define THRESHOLD 0.1    // distance threshold between current and goal positions
 #define LINEAR_GAIN 0.5  // linear velocity gain for proportional logic controller
 #define ANGULAR_GAIN 1.0 // angular velocity gain for proportional logic controller
 #define MAX_SPEED 1.0    // max value that the robot could move
@@ -63,6 +63,10 @@ namespace assignment1_rt2
         // publisher
         rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr cmd_vel_pub_;
 
+        // atomic threads
+        std::atomic<bool> is_busy_{false}; // Add this to track if a loop is running
+
+
         // TF2 LOCALIZATION SYSTEM
         std::shared_ptr<tf2_ros::Buffer> tf2_buffer_;
         std::shared_ptr<tf2_ros::TransformListener> tf2_listener_;
@@ -73,6 +77,11 @@ namespace assignment1_rt2
             const rclcpp_action::GoalUUID &uuid,
             std::shared_ptr<const RobotTarget::Goal> goal)
         {
+            if (is_busy_) {
+                RCLCPP_WARN(this->get_logger(), "Rejecting goal: I am already moving!");
+                return rclcpp_action::GoalResponse::REJECT;
+            }
+            
             RCLCPP_INFO(this->get_logger(), "Received goal request with x: %f, y: %f", goal->x, goal->y);
             (void)uuid;
             return rclcpp_action::GoalResponse::ACCEPT_AND_EXECUTE;
@@ -97,6 +106,9 @@ namespace assignment1_rt2
         // PROCESSING AND UPDATES FUNCTION
         void execute(const std::shared_ptr<GoalHandleRobotTarget> goal_handle)
         {
+            // lock the server
+            is_busy_ = true;
+
             // declare variables
             double current_x = 0.0;
             double current_y = 0.0;
@@ -104,6 +116,15 @@ namespace assignment1_rt2
             double distance_to_goal = 0.0;
             double desired_yaw = 0.0;
             double yaw_error = 0.0;
+
+            // create a stop message
+            auto stop_msg = geometry_msgs::msg::Twist();
+            stop_msg.linear.x = 0.0;
+            stop_msg.linear.y = 0.0;
+            stop_msg.linear.z = 0.0;
+            stop_msg.angular.x = 0.0;
+            stop_msg.angular.y = 0.0;
+            stop_msg.angular.z = 0.0;
 
             RCLCPP_INFO(this->get_logger(), "Executing goal...");
 
@@ -123,10 +144,11 @@ namespace assignment1_rt2
                 // check if the action is cancelled
                 if (goal_handle->is_canceling())
                 {
+                    // stop moving
+                    cmd_vel_pub_->publish(stop_msg); 
                     result->success = false;
                     goal_handle->canceled(result);
-                    cmd_vel_pub_->publish(geometry_msgs::msg::Twist{});
-
+                    
                     return;
                 }
 
@@ -143,7 +165,6 @@ namespace assignment1_rt2
                     // extract current position and orientation
                     current_x = transform.transform.translation.x;
                     current_y = transform.transform.translation.y;
-
                     current_yaw = tf2::getYaw(transform.transform.rotation);
 
                     // compute distance between robot and goal
@@ -152,16 +173,21 @@ namespace assignment1_rt2
 
                     distance_to_goal = std::hypot(difference_x, difference_y);
 
-                    // update feedback
-                    feedback->dist_x = difference_x;
-                    feedback->dist_y = difference_y;
+                    // stop when the goal is reached
+                    if (distance_to_goal < THRESHOLD)
+                    {
+                        RCLCPP_INFO(this->get_logger(), "Goal reached! Sending stop command.");
+                        // MODIFIED: cmd_vel_pub_->publish(stop_msg);
 
-                    goal_handle->publish_feedback(feedback);
-                    RCLCPP_INFO(this->get_logger(), "Distance to goal: %f", distance_to_goal);
+                        for(int i=0; i<10; i++) {
+                            cmd_vel_pub_->publish(stop_msg);
+                            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+                        }
+                        break;
+                    }
 
                     // compute desired heading and heading error
                     desired_yaw = std::atan2(difference_y, difference_x);
-
                     yaw_error = normalizeAngle(desired_yaw - current_yaw);
 
                     // create command message
@@ -171,21 +197,20 @@ namespace assignment1_rt2
                     move_msg.linear.x = std::clamp(LINEAR_GAIN * distance_to_goal, 0.0, MAX_SPEED);
                     move_msg.angular.z = std::clamp(ANGULAR_GAIN * yaw_error, -MAX_SPEED, MAX_SPEED);
 
-                    // send message
+                    // send move message
                     cmd_vel_pub_->publish(move_msg);
 
-                    // stop when the goal is reached
-                    if (distance_to_goal < THRESHOLD)
-                    {
-                        cmd_vel_pub_->publish(geometry_msgs::msg::Twist{});
+                    // update feedback
+                    feedback->dist_x = difference_x;
+                    feedback->dist_y = difference_y;
 
-                        RCLCPP_INFO(this->get_logger(), "Goal reached");
-                        break;
-                    }
+                    goal_handle->publish_feedback(feedback);
+                    RCLCPP_INFO(this->get_logger(), "Distance to goal: %f", distance_to_goal);
                 }
                 catch (const tf2::TransformException &ex)
                 {
-                    RCLCPP_INFO(this->get_logger(), "Could not transform map to base_link: %s", ex.what());
+                    cmd_vel_pub_->publish(stop_msg);
+                    RCLCPP_WARN(this->get_logger(), "Could not transform odom to base_footprint: %s", ex.what());
 
                     // wait for the next loop
                     loop_rate.sleep();
@@ -195,11 +220,19 @@ namespace assignment1_rt2
                 loop_rate.sleep();
             }
 
+            // send a stop message
+            for (int i = 0; i < 10; i++) {
+               cmd_vel_pub_->publish(geometry_msgs::msg::Twist());
+                std::this_thread::sleep_for(std::chrono::milliseconds(20));
+            }
+
+            // notify the client that we arrived
             if (rclcpp::ok())
             {
                 result->success = true;
                 goal_handle->succeed(result);
-                RCLCPP_INFO(this->get_logger(), "Goal reached!");
+                is_busy_ = false; // release the lock
+                RCLCPP_INFO(this->get_logger(), "Goal reached and robot stopped!");
             }
         }
 

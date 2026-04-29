@@ -140,7 +140,7 @@ Both C++ and Python implementations match each other in logic and comments.
 This assignment demonstrates a complete multi-node ROS2 architecture
 with real-time interaction and safety enforcement.
 
----
+--------------------
 
 # Assignment 2 – ROS2 Mobile Robot Safety Controller (C++)
 
@@ -399,3 +399,133 @@ This assignment demonstrates a complete ROS2 system integrating:
 - Safety
 - Services
 - Configuration managemen
+
+--------------------
+
+# Assignment 1 (RT2) – ROS2 Robot Target Action System (C++)
+
+This assignment implements a ROS2 Action-based control system for a differential drive robot (**mogi_bot**) inside the Gazebo 3D simulation environment.
+
+The goal is to provide an interactive interface where a user can send target coordinates (x, y, theta) to an action server. The server handles navigation using proportional control logic and enforces a robust "hard-brake" sequence to ensure the robot stops precisely at the requested goal without simulation drift.
+
+The entire system is implemented in C++ and utilizes multi-threading to allow concurrent user interaction and real-time motion control.
+
+---
+
+## System Architecture
+
+The system is composed of **two ROS2 nodes** and a communication bridge:
+
+### 1. Action Server Node (`action_server_node`)
+This node is the core of the navigation logic and is responsible for:
+- Implementing the Action Server for the `RobotTarget` interface.
+- Monitoring the robot position via **TF2** transforms (from `odom` to `base_footprint`).
+- Calculating Euclidean distance and heading error to the goal.
+- Implementing an **atomic state-lock** (`is_busy_`) to prevent concurrent goal execution (Ghost Thread Protection).
+- Executing a proportional control loop and a **burst-stop** sequence once the goal is reached.
+
+### 2. Action Client Node (`action_client_node`)
+This node provides the user interface and is responsible for:
+- Providing a CLI that allows the user to input coordinates (x, y, theta).
+- Utilizing a **dedicated UI thread** to handle terminal input without blocking ROS 2 communication.
+- Synchronizing the user prompt with server results using atomic flags.
+- Validating user input to ensure robust operation.
+
+### 3. ROS-Gazebo Bridge (`ros_gz_bridge`)
+Acts as the communication layer between ROS 2 and Gazebo, bridging:
+- `/tf` for localization data.
+- `/odom` for odometry tracking.
+- `/cmd_vel` for robot actuation.
+
+---
+
+## Action Interface
+
+### `RobotTarget.action`
+The system uses a custom action definition to manage goal-oriented movement.
+
+**Goal**
+- `float32 x`
+- `float32 y`
+- `float32 theta`
+
+**Result**
+- `bool success`
+
+**Feedback**
+- `float32 dist_x`
+- `float32 dist_y`
+
+---
+
+## Topics Used
+
+- `/tf` (`tf2_msgs/msg/TFMessage`) ROS 2 ↔ Gazebo (Localization)
+- `/cmd_vel` (`geometry_msgs/msg/Twist`) Server → Gazebo (Actuation)
+- `/odom` (`nav_msgs/Odometry`) Gazebo → ROS 2 (Odometry reference)
+
+---
+
+## Navigation and Safety Logic
+
+The server ensures precise navigation and prevents common simulation errors:
+
+### Proportional Control:
+A proportional controller calculates the robot speed based on error:
+- **Linear Velocity:** Proportional to the distance remaining to the goal.
+- **Angular Velocity:** Proportional to the heading error, normalized between [-pi, +pi].
+
+### Ghost Thread Protection:
+The server implements a gatekeeper mechanism. If a goal is already being executed, new requests are explicitly **REJECTED**. This prevents multiple control loops from conflicting over the robot's motors.
+
+### Hard-Brake Mechanism:
+To overcome "sticky" velocity commands in simulation, the server executes a stop sequence:
+- Detects when the distance is within the `THRESHOLD` (0.1).
+- Immediately publishes an explicit zero-velocity message.
+- Executes a burst of **10 stop commands** over 200ms to clear the velocity buffer.
+
+---
+
+## Building the Package
+
+From the ROS2 workspace root:
+```
+colcon build --packages-select assignment1_rt2 assignment1_rt2_interfaces
+source install/setup.bash
+```
+
+---
+
+## Running the System
+
+1. **Start Gazebo:** Launch the simulation environment containing the `mogi_bot`.
+  ```
+  ros2 launch bme_gazebo_sensors spawn_robot_ex.launch.py
+  ```
+2. **Launch Server and Bridge:**
+  ```
+   ros2 launch assignment1_rt2 assignment_launch.py
+  ```
+3. **Run the Action Client:***
+  ```
+  ros2 run assignment1_rt2 action_client_node
+  ```
+---
+
+### 6. Expected Behavior
+```markdown
+## Expected Behavior
+
+- **Interactive Input:** The user enters coordinates as a single line (e.g., `2.0 1.5 0.0`).
+- **Real-time Feedback:** The robot moves towards the target while providing real-time distance feedback.
+- **Safety Lock:** The server rejects new goals if the robot is currently in motion to prevent conflicting threads.
+- **Hard Stop:** Upon reaching the goal, the robot executes a hard stop burst to ensure it remains stationary.
+---
+
+## Notes and Design Choices
+
+- **TF2 Localization:** Used `lookupTransform` for higher precision and stability within the Gazebo environment compared to the raw `/odom` topic.
+- **Thread Safety:** Implemented `std::atomic` flags for synchronization between the UI thread and the main ROS 2 callback thread.
+- **State Management:** An `is_busy_` flag in the server ensures that navigation logic remains deterministic and single-threaded per goal.
+
+This assignment demonstrates a complete ROS 2 Action architecture integrated with a 3D simulation environment and multi-threaded user interaction.
