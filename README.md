@@ -406,7 +406,7 @@ This assignment demonstrates a complete ROS2 system integrating:
 
 This assignment implements a ROS2 Action-based control system for a differential drive robot (**mogi_bot**) inside the Gazebo 3D simulation environment.
 
-The goal is to provide an interactive interface where a user can send target coordinates (x, y, theta) to an action server. The server handles navigation using proportional control logic and enforces a robust "hard-brake" sequence to ensure the robot stops precisely at the requested goal without simulation drift.
+The goal is to provide an interactive interface where a user can send target coordinates (x, y, theta) to an action server. The server handles navigation using a **two-phase proportional control logic**: first driving to the (x,y) position and then rotating in place to match the target orientation (theta). It enforces a robust "hard-brake" sequence to ensure the robot stops precisely at the requested goal without simulation drift.
 
 The entire system is implemented in C++ and utilizes multi-threading to allow concurrent user interaction and real-time motion control.
 
@@ -420,9 +420,9 @@ The system is composed of **two ROS2 nodes** and a communication bridge:
 This node is the core of the navigation logic and is responsible for:
 - Implementing the Action Server for the `RobotTarget` interface.
 - Monitoring the robot position via **TF2** transforms (from `odom` to `base_footprint`).
-- Calculating Euclidean distance and heading error to the goal.
+- Calculating Euclidean distance and orientation error relative to the goal.
+- Executing a **Two-Phase control loop**: Translation Phase (to reach coordinates) and Rotation Phase (to reach target theta).
 - Implementing an **atomic state-lock** (`is_busy_`) to prevent concurrent goal execution (Ghost Thread Protection).
-- Executing a proportional control loop and a **burst-stop** sequence once the goal is reached.
 
 ### 2. Action Client Node (`action_client_node`)
 This node provides the user interface and is responsible for:
@@ -468,21 +468,19 @@ The system uses a custom action definition to manage goal-oriented movement.
 
 ## Navigation and Safety Logic
 
-The server ensures precise navigation and prevents common simulation errors:
+The server ensures precise navigation through a segmented control approach:
 
-### Proportional Control:
-A proportional controller calculates the robot speed based on error:
-- **Linear Velocity:** Proportional to the distance remaining to the goal.
-- **Angular Velocity:** Proportional to the heading error, normalized between [-pi, +pi].
+### Two-Phase Proportional Control:
+1. **Phase 1 (Translation):** The robot drives toward the (x,y) goal. Linear velocity is proportional to the distance, and angular velocity aligns the robot's heading with the target point.
+2. **Phase 2 (Rotation):** Once the robot is within the distance `THRESHOLD` (0.1), it stops linear movement and rotates in place until the orientation error is within the `YAW_THRESHOLD` (0.05).
 
 ### Ghost Thread Protection:
-The server implements a gatekeeper mechanism. If a goal is already being executed, new requests are explicitly **REJECTED**. This prevents multiple control loops from conflicting over the robot's motors.
+The server implements a gatekeeper mechanism using an atomic `is_busy_` flag. If a goal is already being executed, new requests are explicitly **REJECTED**.
 
 ### Hard-Brake Mechanism:
 To overcome "sticky" velocity commands in simulation, the server executes a stop sequence:
-- Detects when the distance is within the `THRESHOLD` (0.1).
-- Immediately publishes an explicit zero-velocity message.
-- Executes a burst of **10 stop commands** over 200ms to clear the velocity buffer.
+- Immediately publishes an explicit zero-velocity message upon reaching the final orientation.
+- Executes a burst of **10 stop commands** over 200ms to clear the velocity buffer in Gazebo.
 
 ---
 
@@ -515,15 +513,17 @@ source install/setup.bash
 ## Expected Behavior
 
 - **Interactive Input:** The user enters coordinates as a single line (e.g., `2.0 1.5 0.0`).
-- **Real-time Feedback:** The robot moves towards the target while providing real-time distance feedback.
-- **Safety Lock:** The server rejects new goals if the robot is currently in motion to prevent conflicting threads.
-- **Hard Stop:** Upon reaching the goal, the robot executes a hard stop burst to ensure it remains stationary.
+- **Segmented Movement:** The robot drives to the point first, stops, and then turns to the final orientation.
+- **Real-time Feedback:** The client displays the remaining distance to the goal during the movement.
+- **Safety Lock:** The server rejects new goals if the robot is currently in motion.
+- **Input Robustness:** The client handles non-numerical inputs gracefully without crashing.
+
 ---
 
 ## Notes and Design Choices
 
-- **TF2 Localization:** Used `lookupTransform` for higher precision and stability within the Gazebo environment compared to the raw `/odom` topic.
-- **Thread Safety:** Implemented `std::atomic` flags for synchronization between the UI thread and the main ROS 2 callback thread.
-- **State Management:** An `is_busy_` flag in the server ensures that navigation logic remains deterministic and single-threaded per goal.
+- **TF2 Localization:** Used `lookupTransform` for higher precision within the Gazebo environment compared to raw topic subscriptions.
+- **Atomic Synchronization:** Implemented `std::atomic` flags for thread-safe communication between the UI and ROS threads.
+- **Precision:** Dual-thresholding ensures the robot parks correctly in both position and orientation.
 
-This assignment demonstrates a complete ROS 2 Action architecture integrated with a 3D simulation environment and multi-threaded user interaction.
+This assignment demonstrates a complete ROS 2 Action architecture integrated with a 3D simulation environment.

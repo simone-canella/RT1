@@ -16,6 +16,7 @@
 #include <tf2_geometry_msgs/tf2_geometry_msgs.hpp>
 
 #define THRESHOLD 0.1    // distance threshold between current and goal positions
+#define YAW_THRESHOLD 0.05    // orientation threshold between current and goal orientations
 #define LINEAR_GAIN 0.5  // linear velocity gain for proportional logic controller
 #define ANGULAR_GAIN 1.0 // angular velocity gain for proportional logic controller
 #define MAX_SPEED 1.0    // max value that the robot could move
@@ -114,8 +115,9 @@ namespace assignment1_rt2
             double current_y = 0.0;
             double current_yaw = 0.0;
             double distance_to_goal = 0.0;
-            double desired_yaw = 0.0;
-            double yaw_error = 0.0;
+            double heading_to_target = 0.0;
+            double yaw_error_to_heading = 0.0;
+            double final_yaw_error = 0.0;
 
             // create a stop message
             auto stop_msg = geometry_msgs::msg::Twist();
@@ -148,6 +150,7 @@ namespace assignment1_rt2
                     cmd_vel_pub_->publish(stop_msg); 
                     result->success = false;
                     goal_handle->canceled(result);
+                    is_busy_ = false;
                     
                     return;
                 }
@@ -158,7 +161,6 @@ namespace assignment1_rt2
                 // position tracking block
                 try
                 {
-                    // OLD COMMAND: transform = tf2_buffer_->lookupTransform("map", "base_link", tf2::TimePointZero);
                     //  use "odom" as the target and "base_footprint" as the source
                     transform = tf2_buffer_->lookupTransform("odom", "base_footprint", tf2::TimePointZero);
 
@@ -173,29 +175,33 @@ namespace assignment1_rt2
 
                     distance_to_goal = std::hypot(difference_x, difference_y);
 
-                    // stop when the goal is reached
-                    if (distance_to_goal < THRESHOLD)
-                    {
-                        RCLCPP_INFO(this->get_logger(), "Goal reached! Sending stop command.");
-                        // MODIFIED: cmd_vel_pub_->publish(stop_msg);
-
-                        for(int i=0; i<10; i++) {
-                            cmd_vel_pub_->publish(stop_msg);
-                            std::this_thread::sleep_for(std::chrono::milliseconds(10));
-                        }
-                        break;
-                    }
-
-                    // compute desired heading and heading error
-                    desired_yaw = std::atan2(difference_y, difference_x);
-                    yaw_error = normalizeAngle(desired_yaw - current_yaw);
+                    // compute orientation errors
+                    heading_to_target = std::atan2(difference_y, difference_x);
+                    yaw_error_to_heading = normalizeAngle(heading_to_target - current_yaw);
+                    final_yaw_error = normalizeAngle(goal->theta - current_yaw);
 
                     // create command message
                     auto move_msg = geometry_msgs::msg::Twist();
-
-                    // proportional control logic
-                    move_msg.linear.x = std::clamp(LINEAR_GAIN * distance_to_goal, 0.0, MAX_SPEED);
-                    move_msg.angular.z = std::clamp(ANGULAR_GAIN * yaw_error, -MAX_SPEED, MAX_SPEED);
+                    
+                    // go to the position
+                    if(distance_to_goal > THRESHOLD){
+                        // proportional control logic
+                        move_msg.linear.x = std::clamp(LINEAR_GAIN * distance_to_goal, 0.0, MAX_SPEED);
+                        move_msg.angular.z = std::clamp(ANGULAR_GAIN * yaw_error_to_heading, -MAX_SPEED, MAX_SPEED);                    
+                    } 
+                    // adjust orientation
+                    else if (std::abs(final_yaw_error) > YAW_THRESHOLD){
+                        // stop moving forward
+                        move_msg.linear.x = 0.0;
+                        
+                        // rotate
+                        move_msg.angular.z = std::clamp(ANGULAR_GAIN * final_yaw_error, -MAX_SPEED, MAX_SPEED);
+                        RCLCPP_INFO(this->get_logger(), "Position reached! Adjusting orientation...");
+                    }
+                    else {
+                        RCLCPP_INFO(this->get_logger(), "Goal position and orientation reached!");
+                break;
+                    }
 
                     // send move message
                     cmd_vel_pub_->publish(move_msg);
